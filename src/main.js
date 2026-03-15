@@ -44,3 +44,5 @@ export function startRepl() {
     rl.close();
   });
 }
+
+startRepl();

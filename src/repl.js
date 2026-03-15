@@ -1,14 +1,14 @@
-import { changeDirectory, listDirectory, goUp } from "./navigation.js";
-import { csvToJson } from "./commands/csvToJson.js";
-import { jsonToCsv } from "./commands/jsonToCsv.js";
 import { count } from "./commands/count.js";
+import { csvToJson } from "./commands/csvToJson.js";
+import { decrypt } from "./commands/decrypt.js";
+import { encrypt } from "./commands/encrypt.js";
 import { hash } from "./commands/hash.js";
 import { hashCompare } from "./commands/hashCompare.js";
-import { encrypt } from "./commands/encrypt.js";
-import { decrypt } from "./commands/decrypt.js";
+import { jsonToCsv } from "./commands/jsonToCsv.js";
 import { logStats } from "./commands/logStats.js";
-import { parseArgs } from "./utils/argParser.js";
-import { resolvePath } from "./utils/pathResolver.js";
+import { changeDirectory, goUp, listDirectory } from "./navigation.js";
+import { argParser } from "./utils/argParser.js";
+import { pathResolver } from "./utils/pathResolver.js";
 
 const COMMANDS = {
   up: async () => {
@@ -27,93 +27,182 @@ const COMMANDS = {
   },
 
   "csv-to-json": async (args) => {
-    const { options, paths } = parseArgs(args);
-    if (paths.length < 1) throw new Error("Invalid input");
+    const { options } = argParser(args);
 
-    const inputPath = resolvePath(paths[0]);
-    const outputPath = paths[1]
-      ? resolvePath(paths[1])
-      : inputPath.replace(/\.csv$/i, ".json");
+    if (!options.input || !options.output) {
+      console.log("Invalid input");
+      return "";
+    }
 
-    await csvToJson(inputPath, outputPath, options);
-    return `Converted ${inputPath} to ${outputPath}`;
+    const inputPath = pathResolver(options.input);
+    const outputPath = pathResolver(options.output);
+
+    try {
+      await csvToJson(inputPath, outputPath, options);
+      console.log(`Converted ${inputPath} to ${outputPath}`);
+    } catch (error) {
+      console.log("Operation failed");
+    }
+
+    return "";
   },
 
   "json-to-csv": async (args) => {
-    const { options, paths } = parseArgs(args);
-    if (paths.length < 1) throw new Error("Invalid input");
+    const { options } = argParser(args);
 
-    const inputPath = resolvePath(paths[0]);
-    const outputPath = paths[1]
-      ? resolvePath(paths[1])
-      : inputPath.replace(/\.json$/i, ".csv");
+    if (!options.input || !options.output) {
+      console.log("Invalid input");
+      return "";
+    }
 
-    await jsonToCsv(inputPath, outputPath, options);
-    return `Converted ${inputPath} to ${outputPath}`;
+    const inputPath = pathResolver(options.input);
+    const outputPath = pathResolver(options.output);
+
+    try {
+      await jsonToCsv(inputPath, outputPath, options);
+      console.log(`Converted ${inputPath} to ${outputPath}`);
+    } catch (error) {
+      console.log("Operation failed");
+    }
+
+    return "";
   },
 
   count: async (args) => {
-    const { paths } = parseArgs(args);
-    if (paths.length < 1) throw new Error("Invalid input");
+    const { options, paths } = argParser(args);
 
-    const resolvedPaths = paths.map((p) => resolvePath(p));
-    const results = await count(resolvedPaths);
+    let inputFile = options.input || paths[0];
+    if (!inputFile) {
+      console.log("Invalid input");
+      return "";
+    }
 
-    return results.map((r) => `${r.path}: ${r.count} lines`).join("\n");
+    const resolvedPath = pathResolver(inputFile);
+    const results = await count([resolvedPath]);
+
+    const result = results[0];
+
+    if (!result.success) {
+      console.log("Operation failed");
+      return "";
+    }
+
+    console.log(`Lines: ${result.lines}`);
+    console.log(`Words: ${result.words}`);
+    console.log(`Characters: ${result.characters}`);
+    return "";
   },
 
   hash: async (args) => {
-    const { options, paths } = parseArgs(args);
-    if (paths.length < 1) throw new Error("Invalid input");
+    const { options } = argParser(args);
 
-    const algorithm = options.algorithm || options.a || "sha256";
-    const resolvedPaths = paths.map((p) => resolvePath(p));
-    const results = await hash(resolvedPaths, algorithm);
+    if (!options.input) {
+      console.log("Invalid input");
+      return "";
+    }
 
-    return results.map((r) => `${r.path}: ${r.hash}`).join("\n");
+    const inputPath = pathResolver(options.input);
+    const algorithm = options.algorithm || "sha256";
+    const saveHash = options.save || false;
+
+    const supportedAlgorithms = ["sha256", "md5", "sha512"];
+    if (!supportedAlgorithms.includes(algorithm)) {
+      console.log("Operation failed");
+      return "";
+    }
+
+    try {
+      const result = await hash(inputPath, algorithm, saveHash);
+
+      console.log(`${algorithm}: ${result.hash}`);
+
+      if (saveHash && result.savedTo) {
+        console.log(`Hash saved to: ${result.savedTo}`);
+      }
+    } catch (error) {
+      console.log("Operation failed");
+    }
+
+    return "";
   },
 
   "hash-compare": async (args) => {
-    const { paths } = parseArgs(args);
-    if (paths.length < 2) throw new Error("Invalid input");
+    const { options } = argParser(args);
 
-    const [path1, path2] = paths.map((p) => resolvePath(p));
-    const result = await hashCompare(path1, path2);
+    if (!options.input || !options.hash) {
+      console.log("Invalid input");
+      return "";
+    }
 
-    return result.match ? "Files match" : "Files do not match";
+    const inputPath = pathResolver(options.input);
+    const hashFilePath = pathResolver(options.hash);
+    const algorithm = options.algorithm || "sha256";
+
+    const supportedAlgorithms = ["sha256", "md5", "sha512"];
+    if (!supportedAlgorithms.includes(algorithm)) {
+      console.log("Operation failed");
+      return "";
+    }
+
+    try {
+      const result = await hashCompare(inputPath, hashFilePath, algorithm);
+      console.log(result.match ? "OK" : "MISMATCH");
+    } catch (error) {
+      console.log("Operation failed");
+    }
+
+    return "";
   },
 
   encrypt: async (args) => {
-    const { options, paths } = parseArgs(args);
-    if (paths.length < 2 || !(options.password || options.p))
-      throw new Error("Invalid input");
+    const { options } = argParser(args);
 
-    const password = options.password || options.p;
-    const inputPath = resolvePath(paths[0]);
-    const outputPath = resolvePath(paths[1]);
+    if (!options.input || !options.output || !options.password) {
+      console.log("Invalid input");
+      return "";
+    }
 
-    await encrypt(inputPath, outputPath, password);
-    return `Encrypted ${inputPath} to ${outputPath}`;
+    const inputPath = pathResolver(options.input);
+    const outputPath = pathResolver(options.output);
+    const password = options.password;
+
+    try {
+      await encrypt(inputPath, outputPath, password);
+      console.log(`Encrypted ${inputPath} to ${outputPath}`);
+    } catch (error) {
+      console.log("Operation failed");
+    }
+
+    return "";
   },
 
   decrypt: async (args) => {
-    const { options, paths } = parseArgs(args);
-    if (paths.length < 2 || !(options.password || options.p))
-      throw new Error("Invalid input");
+    const { options } = argParser(args);
 
-    const password = options.password || options.p;
-    const inputPath = resolvePath(paths[0]);
-    const outputPath = resolvePath(paths[1]);
+    if (!options.input || !options.output || !options.password) {
+      console.log("Invalid input");
+      return "";
+    }
 
-    await decrypt(inputPath, outputPath, password);
-    return `Decrypted ${inputPath} to ${outputPath}`;
+    const inputPath = pathResolver(options.input);
+    const outputPath = pathResolver(options.output);
+    const password = options.password;
+
+    try {
+      await decrypt(inputPath, outputPath, password);
+      console.log(`Decrypted ${inputPath} to ${outputPath}`);
+    } catch (error) {
+      console.log("Operation failed");
+    }
+
+    return "";
   },
 
   "log-stats": async (args) => {
-    const { options, paths } = parseArgs(args);
+    const { options, paths } = argParser(args);
     if (paths.length < 1) throw new Error("Invalid input");
 
-    const resolvedPaths = paths.map((p) => resolvePath(p));
+    const resolvedPaths = paths.map((p) => pathResolver(p));
     const stats = await logStats(resolvedPaths, options);
 
     const output = [];

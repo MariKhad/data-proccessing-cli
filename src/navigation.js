@@ -35,8 +35,8 @@ export async function listDirectory(targetPath = ".") {
 
     const formatted = files
       .map((file) => {
-        const type = file.isDirectory() ? "DIR" : "FILE";
-        return `${type}\t${file.name}`;
+        const type = file.isDirectory() ? "[folder]" : "[file]";
+        return `${file.name} ${type}`;
       })
       .join("\n");
 
@@ -52,6 +52,11 @@ export function resolvePath(relativePath) {
 
 export async function goUp() {
   const parentDir = path.dirname(currentWorkingDirectory);
+
+  if (parentDir === currentWorkingDirectory) {
+    return currentWorkingDirectory;
+  }
+
   await changeDirectory(parentDir);
   return parentDir;
 }
