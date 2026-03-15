@@ -199,20 +199,26 @@ const COMMANDS = {
   },
 
   "log-stats": async (args) => {
-    const { options, paths } = argParser(args);
-    if (paths.length < 1) throw new Error("Invalid input");
+    const { options } = argParser(args);
 
-    const resolvedPaths = paths.map((p) => pathResolver(p));
-    const stats = await logStats(resolvedPaths, options);
+    if (!options.input || !options.output) {
+      console.log("Invalid input");
+      return "";
+    }
 
-    const output = [];
-    output.push(`Total requests: ${stats.total}`);
-    output.push("Top paths:");
-    stats.topPaths.forEach((item, i) => {
-      output.push(`  ${i + 1}. ${item.path} (${item.count})`);
-    });
+    const inputPath = pathResolver(options.input);
+    const outputPath = pathResolver(options.output);
 
-    return output.join("\n");
+    try {
+      const stats = await logStats(inputPath, outputPath, options);
+      console.log(`Stats written to ${outputPath}`);
+      console.log(`Total requests: ${stats.total}`);
+      console.log(`Average response time: ${stats.avgResponseTimeMs} ms`);
+    } catch (error) {
+      console.log("Operation failed");
+    }
+
+    return "";
   },
 };
 
